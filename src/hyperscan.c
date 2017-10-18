@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 #include "main.h"
-
+#include <string.h>
 #include <hs/hs.h>
 
 static int found = 0;
@@ -12,6 +12,45 @@ static int eventHandler(UNUSED unsigned int  id,
                         UNUSED unsigned int flags,
                         UNUSED void * ctx) {
     found++;
+    return 0;
+}
+
+int hs_get_compile(char * pattern, hs_scratch_t ** scratch, hs_database_t ** database) {
+    hs_compile_error_t * compile_err;
+    if (hs_compile(pattern, HS_FLAG_DOTALL | HS_FLAG_SOM_LEFTMOST, HS_MODE_BLOCK, NULL, &(*database), &compile_err) != HS_SUCCESS) {
+        fprintf(stderr, "ERROR: Unable to compile pattern \"%s\": %s\n",
+                pattern, compile_err->message);
+        hs_free_compile_error(compile_err);
+        return -1;
+    }
+
+    if (hs_alloc_scratch(*database, &(*scratch)) != HS_SUCCESS) {
+        fprintf(stderr, "ERROR: Unable to allocate scratch space. Exiting.\n");
+        hs_free_database(*database);
+        return -1;
+    }
+    return 0;
+}
+
+int hs_find(char * subject, hs_database_t * database, hs_scratch_t * scratch, struct result * res) {
+    TIME_TYPE start, end;
+    double * times = calloc(1, sizeof(double));
+    int const times_len = 1;
+    int subject_len = strlen(subject);
+    found = 0;
+    GET_TIME(start);
+    if (hs_scan(database, subject, subject_len, 0, scratch, eventHandler, NULL) != HS_SUCCESS) {
+        fprintf(stderr, "ERROR: Unable to scan input buffer. Exiting.\n");
+        return -1;
+    }
+    GET_TIME(end);
+    times[0] = TIME_DIFF_IN_MS(start, end);
+
+    res->matches = found;
+    get_mean_and_derivation(times, times_len, res);
+
+    free(times);
+
     return 0;
 }
 

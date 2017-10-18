@@ -6,6 +6,7 @@ extern "C" {
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+#include <hs/hs.h>
 
 #define TIME_TYPE                   clock_t
 #define GET_TIME(res)               { res = clock(); }
@@ -38,6 +39,8 @@ int onig_find_all(char* pattern, char* subject, int subject_len, int repeat, str
 #endif
 #ifdef INCLUDE_HYPERSCAN
 int hs_find_all(char * pattern, char * subject, int subject_len, int repeat, struct result * res);
+int hs_get_compile(char * pattern, hs_scratch_t ** scratch, hs_database_t ** database);
+int hs_find(char * subject, hs_database_t * database, hs_scratch_t * scratch, struct result * res);
 #endif
 int rust_find_all(char * pattern, char * subject, int subject_len, int repeat, struct result * res);
 

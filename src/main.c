@@ -3,18 +3,21 @@
 #include <stdlib.h>
 #include <getopt.h>
 
+#include <hs/hs.h>
+
 #include "main.h"
 #include "version.h"
 
 static char* data = NULL;
 static int data_len = 0;
 
-struct engines {
+struct engine {
     char * name;
     int (*find_all)(char* pattern, char* subject, int subject_len, int repeat, struct result * result);
 };
 
-static struct engines engines [] = {
+
+static struct engine engines [] = {
 #ifdef INCLUDE_PCRE2
     {.name = "pcre",        .find_all = pcre2_std_find_all},
     {.name = "pcre-dfa",    .find_all = pcre2_dfa_find_all},
@@ -32,7 +35,7 @@ static struct engines engines [] = {
 #ifdef INCLUDE_HYPERSCAN
     {.name = "hscan",       .find_all = hs_find_all},
 #endif
-    {.name = "rust_regex",  .find_all = rust_find_all},
+    //{.name = "rust_regex",  .find_all = rust_find_all},
 };
 
 static char * regex [] = {
@@ -97,18 +100,51 @@ void find_all(char* pattern, char* subject, int subject_len, int repeat, struct 
     int iter;
 
     fprintf(stdout, "-----------------\nRegex: '%s'\n", pattern);
-
     for (iter = 0; iter < sizeof(engines)/sizeof(engines[0]); iter++) {
-        int ret = engines[iter].find_all(pattern, subject, subject_len, repeat, &(engine_results[iter]));
-        if (ret == -1) {
-            engine_results[iter].time = 0;
-            engine_results[iter].time_sd = 0;
-            engine_results[iter].matches = 0;
-            engine_results[iter].score = 0;
-        } else {
-            printResult(engines[iter].name, &(engine_results[iter]));
+      char *copy_data = (char*) malloc(subject_len);
+      strcpy(copy_data, subject);
+			char * pch;
+      //fprintf(stdout, "input --------- %s\n", subject);
+			pch = strtok(copy_data, "\n");
+
+      if (strcmp(engines[iter].name,"hscan") == 0) {
+          hs_scratch_t * scratch = NULL;
+          hs_database_t * database = NULL;
+          if (hs_get_compile(pattern, &(scratch), &(database)) < 0) {
+              fprintf(stdout, "compile pattern failed\n");
+              continue;
+          }
+          while(pch != NULL) {
+            struct result tmp;
+            int ret = hs_find(pch, database, scratch, &(tmp));
+            if (ret != -1) {
+                engine_results[iter].time += tmp.time;
+                engine_results[iter].time_sd += tmp.time_sd;;
+                engine_results[iter].matches += tmp.matches;
+                engine_results[iter].score += tmp.score;
+            }
+            pch = strtok(NULL, "\n");
+          }
+          hs_free_scratch(scratch);
+          hs_free_database(database);
+      }
+      else {
+        while(pch != NULL) {
+          int pch_len = strlen(pch);
+          struct result tmp;
+          int ret = engines[iter].find_all(pattern, pch, pch_len, repeat, &(tmp));
+          if (ret != -1) {
+              engine_results[iter].time += tmp.time;
+              engine_results[iter].time_sd += tmp.time_sd;;
+              engine_results[iter].matches += tmp.matches;
+              engine_results[iter].score += tmp.score;
+          }
+          pch = strtok(NULL, "\n");
         }
+      }
+        printResult(engines[iter].name, &(engine_results[iter]));
     }
+
 
     int score_points = 5;
     for (int top = 0; top < score_points; top++) {
